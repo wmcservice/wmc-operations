@@ -2,12 +2,12 @@ import { format, addDays, startOfWeek, eachDayOfInterval, differenceInCalendarDa
 
 export function formatDate(dateStr) {
     if (!dateStr) return '';
-    return format(parseISO(dateStr), 'dd MMM yyyy');
+    return format(parseISO(dateStr), 'dd/MM/yyyy');
 }
 
 export function formatDateShort(dateStr) {
     if (!dateStr) return '';
-    return format(parseISO(dateStr), 'dd MMM');
+    return format(parseISO(dateStr), 'dd/MM');
 }
 
 export function formatDay(dateStr) {
