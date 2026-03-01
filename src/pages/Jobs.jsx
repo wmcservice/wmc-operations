@@ -269,54 +269,68 @@ export default function Jobs() {
         if (!file) return;
 
         try {
+            setLoading(true);
             const data = await file.arrayBuffer();
-            const workbook = read(data);
+            const workbook = read(data, { cellDates: true }); // Ensure dates are parsed
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
             const jsonData = utils.sheet_to_json(worksheet);
-            const allStaff = getStaff();
+            
+            // Get latest staff from state or fetch if empty
+            let currentStaff = staff;
+            if (currentStaff.length === 0) {
+                const { data: sData } = await supabase.from('staff').select('id, nickname, full_name').eq('is_active', true);
+                currentStaff = (sData || []).map(s => ({ id: s.id, nickname: s.nickname, fullName: s.full_name }));
+            }
+
+            // Helper to clean and format date to YYYY-MM-DD
+            const parseDate = (val) => {
+                if (!val) return new Date().toISOString().split('T')[0];
+                try {
+                    const d = new Date(val);
+                    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+                } catch (e) {}
+                return new Date().toISOString().split('T')[0];
+            };
 
             // Map Excel data to Job model
             const newJobs = jsonData.map(row => {
-                // Map nicknames to IDs
                 const nicknames = row['รายชื่อทีมงาน (ชื่อเล่นคั่นด้วยคอมม่า)'] 
-                    ? row['รายชื่อทีมงาน (ชื่อเล่นคั่นด้วยคอมม่า)'].split(',').map(n => n.trim()) 
+                    ? String(row['รายชื่อทีมงาน (ชื่อเล่นคั่นด้วยคอมม่า)']).split(',').map(n => n.trim()) 
                     : [];
+                
                 const staffIds = nicknames
-                    .map(name => allStaff.find(s => s.nickname === name || s.fullName.includes(name))?.id)
+                    .map(name => currentStaff.find(s => 
+                        (s.nickname && s.nickname.toLowerCase() === name.toLowerCase()) || 
+                        (s.fullName && s.fullName.toLowerCase().includes(name.toLowerCase()))
+                    )?.id)
                     .filter(Boolean);
 
                 return {
-                    id: row.id || `job-imported-${crypto.randomUUID()}`,
-                    qtNumber: row['เลขที่ QT'] || row.qtNumber || '',
+                    qtNumber: String(row['เลขที่ QT'] || row.qtNumber || ''),
                     projectName: row['ชื่อโปรเจกต์'] || row.projectName || '',
                     clientName: row['ชื่อลูกค้า'] || row.clientName || '',
                     createdBy: row['ผู้รับผิดชอบ'] || row.createdBy || '',
                     jobType: row['ประเภทงาน'] || row.jobType || 'ติดตั้ง',
                     status: row['สถานะ'] || row.status || 'รอคิว',
                     priority: row['ความสำคัญ'] || row.priority || 'ปกติ',
-                    startDate: row['วันที่เริ่ม'] || row.startDate || new Date().toISOString().split('T')[0],
-                    endDate: row['วันที่สิ้นสุด'] || row.endDate || new Date().toISOString().split('T')[0],
+                    startDate: parseDate(row['วันที่เริ่ม'] || row.startDate),
+                    endDate: parseDate(row['วันที่สิ้นสุด'] || row.endDate),
                     defaultCheckIn: row['เวลาเข้า'] || row.defaultCheckIn || '09:00',
                     defaultCheckOut: row['เวลาออก'] || row.defaultCheckOut || '18:00',
-                    overallProgress: parseInt(row['ความคืบหน้า (%)'] || 0),
+                    overallProgress: parseInt(row['ความคืบหน้า (%)'] || 0) || 0,
                     currentIssues: row['ปัญหาที่พบ'] || '',
                     notes: row['หมายเหตุ'] || row.notes || '',
-                    assignedStaffIds: staffIds,
-                    progressLogs: [],
-                    attachments: [],
-                    subTasks: [],
-                    createdAt: row.createdAt || new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
+                    assignedStaffIds: staffIds
                 };
             }).filter(j => j.projectName);
 
             if (newJobs.length === 0) {
-                alert('ไม่พบข้อมูลงานที่ถูกต้องในไฟล์');
+                alert('ไม่พบข้อมูลงานที่ถูกต้องในไฟล์ (กรุณาตรวจสอบชื่อโปรเจกต์)');
+                setLoading(false);
                 return;
             }
 
             if (confirm(`พบข้อมูลงาน ${newJobs.length} รายการ ต้องการนำเข้าข้อมูลเหล่านี้ใช่หรือไม่?`)) {
-                setLoading(true);
                 let successCount = 0;
                 let errorCount = 0;
 
@@ -340,11 +354,23 @@ export default function Jobs() {
                             updated_at: new Date().toISOString()
                         };
 
-                        const { error } = await supabase.from('jobs').insert([dbData]);
+                        const { data: inserted, error } = await supabase.from('jobs').insert([dbData]).select();
                         if (error) throw error;
+
+                        // Also add staff assignments (allocations) if provided
+                        if (job.assignedStaffIds.length > 0 && inserted?.[0]?.id) {
+                            const allocs = job.assignedStaffIds.map(sid => ({
+                                job_id: inserted[0].id,
+                                staff_id: sid,
+                                date: job.startDate,
+                                status: 'ได้รับมอบหมาย'
+                            }));
+                            await supabase.from('allocations').insert(allocs);
+                        }
+                        
                         successCount++;
                     } catch (err) {
-                        console.error('Error importing single job:', err);
+                        console.error('Error importing job:', err);
                         errorCount++;
                     }
                 }
@@ -354,11 +380,11 @@ export default function Jobs() {
             }
         } catch (error) {
             console.error("Import Error:", error);
-            alert('เกิดข้อผิดพลาดในการนำเข้าไฟล์');
+            alert('เกิดข้อผิดพลาดในการอ่านไฟล์: ' + error.message);
         } finally {
             setLoading(false);
+            e.target.value = '';
         }
-        e.target.value = '';
     };
 
     return (
