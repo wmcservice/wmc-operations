@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 
 export function useTheme() {
     const [theme, setTheme] = useState(() => {
-        return localStorage.getItem('wmc_theme') || 'dark';
+        return localStorage.getItem('wmc_theme') || 'light';
     });
 
     useEffect(() => {
