@@ -118,6 +118,10 @@ export default function Scheduler({ user }) {
                     {currentRangeDates.map(dateStr => {
                         const isToday = dateStr === today;
                         const dayAllocs = allocations.filter(a => a.date === dateStr);
+                        
+                        // Group allocations by job_id to avoid duplicates
+                        const uniqueJobIds = [...new Set(dayAllocs.map(a => a.job_id))];
+                        
                         return (
                             <div key={dateStr} className={`scheduler-day ${isToday ? 'today' : ''}`}>
                                 <div className="day-header">
@@ -128,13 +132,19 @@ export default function Scheduler({ user }) {
                                     </div>
                                 </div>
                                 <div className="day-content">
-                                    {dayAllocs.length > 0 ? (
-                                        dayAllocs.map(alloc => {
-                                            const job = jobs.find(j => j.id === alloc.job_id);
-                                            const worker = staff.find(s => s.id === alloc.staff_id);
+                                    {uniqueJobIds.length > 0 ? (
+                                        uniqueJobIds.map(jobId => {
+                                            const job = jobs.find(j => j.id === jobId);
                                             if (!job) return null;
+                                            
+                                            // Find all workers for this job on this day
+                                            const jobWorkers = dayAllocs
+                                                .filter(a => a.job_id === jobId)
+                                                .map(a => staff.find(s => s.id === a.staff_id))
+                                                .filter(Boolean);
+
                                             return (
-                                                <div key={alloc.id} className={`scheduler-job-card status-${statusToKey(job.status)}`} onClick={() => setSelectedJob(job)}>
+                                                <div key={jobId} className={`scheduler-job-card status-${statusToKey(job.status)}`} onClick={() => setSelectedJob(job)}>
                                                     <div className="sj-header">
                                                         <span className="sj-name">{job.projectName}</span>
                                                     </div>
@@ -143,7 +153,9 @@ export default function Scheduler({ user }) {
                                                         <span className="sj-time-range">{job.defaultCheckIn} - {job.defaultCheckOut}</span>
                                                     </div>
                                                     <div className="sj-staff">
-                                                        <span className="sj-staff-chip">{worker?.nickname || 'ช่าง'}</span>
+                                                        {jobWorkers.map(w => (
+                                                            <span key={w.id} className="sj-staff-chip">{w.nickname}</span>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             );
@@ -168,32 +180,16 @@ function JobModal({ job, staff, clientSuggestions = [], onSave, onClose }) {
     const [form, setForm] = useState(job ? { ...job, assignedStaffIds: job.assignedStaffIds || [] } : createJob());
     const [selectionType, setSelectionType] = useState(['พี่ยุ้ย', 'แพร', 'ไอซ์'].includes(form.createdBy) ? form.createdBy : (form.createdBy ? 'อื่นๆ' : ''));
     const [subTaskInput, setSubTaskInput] = useState('');
-    const [linkInput, setLinkInput] = useState({ name: '', url: '' });
-    
     const update = (f, v) => setForm(prev => ({ ...prev, [f]: v }));
 
     const handleAddSubTask = () => {
         if (!subTaskInput.trim()) return;
         const newSubTask = { id: Date.now(), title: subTaskInput.trim(), isCompleted: false };
-        const ut = [...(form.subTasks || []), newSubTask];
-        update('subTasks', ut); setSubTaskInput('');
-        const completed = ut.filter(t => t.isCompleted).length;
-        update('overallProgress', Math.round((completed / ut.length) * 100));
-    };
-
-    const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-            let fileUrl = '';
-            if (file.type.startsWith('image/')) fileUrl = await compressImage(file);
-            else {
-                if (file.size > 1024 * 1024) { alert('ไฟล์ใหญ่เกินไป'); return; }
-                const reader = new FileReader();
-                fileUrl = await new Promise((res) => { reader.onload = (ev) => res(ev.target.result); reader.readAsDataURL(file); });
-            }
-            update('attachments', [...(form.attachments || []), { id: Date.now(), name: file.name, url: fileUrl, type: file.type.includes('pdf') ? 'pdf' : 'image' }]);
-        } catch (err) { console.error(err); }
+        const updatedTasks = [...(form.subTasks || []), newSubTask];
+        update('subTasks', updatedTasks);
+        setSubTaskInput('');
+        const completed = updatedTasks.filter(t => t.isCompleted).length;
+        update('overallProgress', Math.round((completed / updatedTasks.length) * 100));
     };
 
     return (
@@ -267,6 +263,14 @@ function JobDetailModal({ job, staff, user, onClose, onEdit, onUpdate }) {
                     <div className="detail-row"><span className={`badge badge-${statusKey}`}>{job.status}</span><span className="job-type-tag">{job.jobType}</span><span style={{ color: getPriorityColor(job.priority), fontWeight: 600 }}>{job.priority}</span></div>
                     <div className="detail-section" style={{ background: 'var(--bg-tertiary)', padding: '16px', borderRadius: '8px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}><h4 style={{ margin: 0 }}>ความคืบหน้า: {job.overallProgress}%</h4><input type="range" min="0" max="100" value={job.overallProgress} onChange={async e => { const val = parseInt(e.target.value); await supabase.from('jobs').update({ overall_progress: val, status: val === 100 ? 'เสร็จสมบูรณ์' : job.status }).eq('id', job.id); onUpdate(); }} /></div>
+                    </div>
+                    <div className="detail-section">
+                        <h4>ทีมงานที่มอบหมายวันนี้</h4>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {staff.filter(s => (job.assignedStaffIds || []).includes(s.id)).map(s => (
+                                <span key={s.id} className="staff-chip">{s.nickname}</span>
+                            ))}
+                        </div>
                     </div>
                     <div className="detail-section">
                         <h4>บันทึกความคืบหน้า (โดย: {user?.user_metadata?.nickname || user?.email?.split('@')[0]})</h4>
