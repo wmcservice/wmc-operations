@@ -242,6 +242,16 @@ function JobModal({ job, staff, clientSuggestions = [], onSave, onClose }) {
                         <div className="input-group"><label>วันที่เริ่ม</label><input className="input" type="date" value={form.startDate} onChange={e => update('startDate', e.target.value)} /></div>
                         <div className="input-group"><label>วันที่สิ้นสุด</label><input className="input" type="date" value={form.endDate} onChange={e => update('endDate', e.target.value)} /></div>
                     </div>
+                    <div className="form-row">
+                        <div className="input-group">
+                            <label><Clock size={14} /> เวลาเข้างาน (ดีฟอลต์)</label>
+                            <input className="input" type="time" value={form.defaultCheckIn} onChange={e => update('defaultCheckIn', e.target.value)} />
+                        </div>
+                        <div className="input-group">
+                            <label><Clock size={14} /> เวลาเลิกงาน (ดีฟอลต์)</label>
+                            <input className="input" type="time" value={form.defaultCheckOut} onChange={e => update('defaultCheckOut', e.target.value)} />
+                        </div>
+                    </div>
 
                     <div className="input-group full-width" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '16px' }}>
                         <label>รายการงานย่อย</label>
