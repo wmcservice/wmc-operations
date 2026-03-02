@@ -59,9 +59,9 @@ export default function App() {
         <div className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
           <Topbar onMenuToggle={toggleMobileSidebar} user={session.user} />
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/jobs" element={<Jobs />} />
-            <Route path="/scheduler" element={<Scheduler />} />
+            <Route path="/" element={<Dashboard user={session.user} />} />
+            <Route path="/jobs" element={<Jobs user={session.user} />} />
+            <Route path="/scheduler" element={<Scheduler user={session.user} />} />
             <Route path="/staff" element={<StaffPage />} />
             <Route path="/performance" element={<Performance />} />
             <Route path="/settings" element={<Settings />} />
