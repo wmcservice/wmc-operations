@@ -410,6 +410,10 @@ function JobModal({ job, staff, clientSuggestions = [], onSave, onClose }) {
                             <input className="input" value={form.qtNumber} onChange={e => update('qtNumber', e.target.value)} placeholder="QT-2625-XXX" />
                         </div>
                         <div className="input-group">
+                            <label>ชื่อโปรเจกต์</label>
+                            <input className="input" value={form.projectName} onChange={e => update('projectName', e.target.value)} placeholder="เช่น Okamura-DTGO" />
+                        </div>
+                        <div className="input-group">
                             <label>ชื่อลูกค้า</label>
                             <input 
                                 className="input" 
