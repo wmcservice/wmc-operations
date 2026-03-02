@@ -609,7 +609,7 @@ function JobModal({ job, staff, onSave, onClose }) {
                             <input className="input" value={form.qtNumber} onChange={e => update('qtNumber', e.target.value)} />
                         </div>
                         <div className="input-group">
-                            <label>ผู้รับผิดชอบงาน</label>
+                            <label>เซลล์ที่รับผิดชอบ</label>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 <select 
                                     className="select" 

@@ -831,7 +831,7 @@ function JobModal({ job, staff, onSave, onClose }) {
                             <input className="input" value={form.clientName} onChange={e => update('clientName', e.target.value)} placeholder="เช่น Okamura" />
                         </div>
                         <div className="input-group">
-                            <label>ผู้รับผิดชอบงาน (ลงชื่อ)</label>
+                            <label>เซลล์ที่รับผิดชอบ</label>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 <select 
                                     className="select" 
