@@ -641,6 +641,46 @@ function JobModal({ job, onSave, onClose }) {
                             <textarea className="textarea" value={form.notes} onChange={e => update('notes', e.target.value)} />
                         </div>
 
+                        {/* Permanent Team Selection */}
+                        <div className="input-group full-width" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '16px' }}>
+                            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>ทีมงานประจำโปรเจกต์</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>เลือกทีมงานที่ดูแลโปรเจกต์นี้หลักๆ</span>
+                            </label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                                {staff.map(s => {
+                                    const isSelected = (form.assignedStaffIds || []).includes(s.id);
+                                    return (
+                                        <button
+                                            key={s.id}
+                                            type="button"
+                                            onClick={() => {
+                                                const currentIds = form.assignedStaffIds || [];
+                                                if (currentIds.includes(s.id)) {
+                                                    update('assignedStaffIds', currentIds.filter(id => id !== s.id));
+                                                } else {
+                                                    update('assignedStaffIds', [...currentIds, s.id]);
+                                                }
+                                            }}
+                                            style={{
+                                                padding: '4px 12px',
+                                                borderRadius: '20px',
+                                                border: '1px solid',
+                                                borderColor: isSelected ? 'var(--brand-primary)' : 'var(--border-primary)',
+                                                background: isSelected ? 'var(--brand-primary)' : 'transparent',
+                                                color: isSelected ? '#fff' : 'var(--text-primary)',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            {s.nickname}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
                         {/* Sub-tasks Section */}
                         <div className="input-group full-width" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '16px' }}>
                             <label>รายการงานย่อย</label>

@@ -46,6 +46,10 @@ export default function Jobs() {
     const fetchData = async () => {
         setLoading(true);
         try {
+            // Fetch Allocations first to map members to jobs
+            const { data: allocData, error: allocError } = await supabase.from('allocations').select('job_id, staff_id');
+            if (allocError) throw allocError;
+
             const { data, error } = await supabase
                 .from('jobs')
                 .select(`
@@ -58,45 +62,50 @@ export default function Jobs() {
 
             if (error) throw error;
 
-            const formatted = data.map(j => ({
-                id: j.id,
-                qtNumber: j.qt_number,
-                projectName: j.project_name,
-                clientName: j.client_name,
-                jobType: j.job_type,
-                status: j.status,
-                startDate: j.start_date,
-                endDate: j.end_date,
-                defaultCheckIn: j.default_check_in,
-                defaultCheckOut: j.default_check_out,
-                priority: j.priority,
-                fixReason: j.fix_reason,
-                notes: j.notes,
-                createdBy: j.created_by,
-                overallProgress: j.overall_progress,
-                currentIssues: j.current_issues,
-                createdAt: j.created_at,
-                updatedAt: j.updated_at,
-                subTasks: (j.sub_tasks || []).map(st => ({
-                    id: st.id,
-                    title: st.title,
-                    isCompleted: st.is_completed
-                })),
-                attachments: (j.attachments || []).map(a => ({
-                    id: a.id,
-                    name: a.name,
-                    url: a.url,
-                    type: a.type
-                })),
-                progressLogs: (j.progress_logs || []).map(pl => ({
-                    id: pl.id,
-                    date: pl.log_date,
-                    text: pl.text,
-                    author: pl.author,
-                    workerIds: (pl.log_staff_assignments || []).map(lsa => lsa.staff_id)
-                })).sort((a, b) => new Date(b.id) - new Date(a.id)),
-                assignedStaffIds: [] 
-            }));
+            const formatted = data.map(j => {
+                const jobAllocs = (allocData || []).filter(a => a.job_id === j.id);
+                const uniqueStaffIds = [...new Set(jobAllocs.map(a => a.staff_id))];
+
+                return {
+                    id: j.id,
+                    qtNumber: j.qt_number,
+                    projectName: j.project_name,
+                    clientName: j.client_name,
+                    jobType: j.job_type,
+                    status: j.status,
+                    startDate: j.start_date,
+                    endDate: j.end_date,
+                    defaultCheckIn: j.default_check_in,
+                    defaultCheckOut: j.default_check_out,
+                    priority: j.priority,
+                    fixReason: j.fix_reason,
+                    notes: j.notes,
+                    createdBy: j.created_by,
+                    overallProgress: j.overall_progress,
+                    currentIssues: j.current_issues,
+                    createdAt: j.created_at,
+                    updatedAt: j.updated_at,
+                    subTasks: (j.sub_tasks || []).map(st => ({
+                        id: st.id,
+                        title: st.title,
+                        isCompleted: st.is_completed
+                    })),
+                    attachments: (j.attachments || []).map(a => ({
+                        id: a.id,
+                        name: a.name,
+                        url: a.url,
+                        type: a.type
+                    })),
+                    progressLogs: (j.progress_logs || []).map(pl => ({
+                        id: pl.id,
+                        date: pl.log_date,
+                        text: pl.text,
+                        author: pl.author,
+                        workerIds: (pl.log_staff_assignments || []).map(lsa => lsa.staff_id)
+                    })).sort((a, b) => new Date(b.id) - new Date(a.id)),
+                    assignedStaffIds: uniqueStaffIds
+                };
+            });
 
             setJobs(formatted);
             setSelectedIds([]); // Clear selection after fetch
@@ -195,6 +204,26 @@ export default function Jobs() {
                 const { data, error } = await supabase.from('jobs').insert([dbData]).select();
                 if (error) throw error;
                 jobId = data[0].id;
+            }
+
+            // Save Permanent Team (Allocations)
+            if (job.assignedStaffIds?.length > 0) {
+                // Get existing allocations for this job
+                const { data: existingAllocs } = await supabase.from('allocations').select('staff_id').eq('job_id', jobId);
+                const existingStaffIds = (existingAllocs || []).map(a => a.staff_id);
+                
+                // Only add staff who are not already allocated
+                const newStaffToAllocate = job.assignedStaffIds.filter(sid => !existingStaffIds.includes(sid));
+                
+                if (newStaffToAllocate.length > 0) {
+                    const allocData = newStaffToAllocate.map(sid => ({
+                        job_id: jobId,
+                        staff_id: sid,
+                        date: job.startDate, // Initial allocation on start date
+                        status: 'ได้รับมอบหมาย'
+                    }));
+                    await supabase.from('allocations').insert(allocData);
+                }
             }
 
             await supabase.from('sub_tasks').delete().eq('job_id', jobId);
@@ -652,6 +681,7 @@ export default function Jobs() {
             {showModal && (
                 <JobModal
                     job={editingJob}
+                    staff={staff}
                     onSave={handleSave}
                     onClose={() => { setShowModal(false); setEditingJob(null); }}
                 />
@@ -676,7 +706,7 @@ export default function Jobs() {
     );
 }
 
-function JobModal({ job, onSave, onClose }) {
+function JobModal({ job, staff, onSave, onClose }) {
     const [form, setForm] = useState(job || createJob());
     const initialSelectionType = ['พี่ยุ้ย', 'แพร', 'ไอซ์'].includes(form.createdBy) ? form.createdBy : (form.createdBy ? 'อื่นๆ' : '');
     const [selectionType, setSelectionType] = useState(initialSelectionType);
@@ -767,6 +797,15 @@ function JobModal({ job, onSave, onClose }) {
 
     const removeAttachment = (id) => {
         update('attachments', (form.attachments || []).filter(a => a.id !== id));
+    };
+
+    const toggleStaffSelection = (staffId) => {
+        const currentIds = form.assignedStaffIds || [];
+        if (currentIds.includes(staffId)) {
+            update('assignedStaffIds', currentIds.filter(id => id !== staffId));
+        } else {
+            update('assignedStaffIds', [...currentIds, staffId]);
+        }
     };
 
     return (
@@ -862,6 +901,39 @@ function JobModal({ job, onSave, onClose }) {
                         <div className="input-group full-width">
                             <label>หมายเหตุ</label>
                             <textarea className="textarea" value={form.notes} onChange={e => update('notes', e.target.value)} placeholder="หมายเหตุเพิ่มเติม..." />
+                        </div>
+
+                        {/* Permanent Team Selection */}
+                        <div className="input-group full-width" style={{ borderTop: '1px solid var(--border-primary)', paddingTop: '16px' }}>
+                            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>ทีมงานประจำโปรเจกต์</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>เลือกทีมงานที่ดูแลโปรเจกต์นี้หลักๆ</span>
+                            </label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                                {staff.map(s => {
+                                    const isSelected = (form.assignedStaffIds || []).includes(s.id);
+                                    return (
+                                        <button
+                                            key={s.id}
+                                            type="button"
+                                            onClick={() => toggleStaffSelection(s.id)}
+                                            style={{
+                                                padding: '4px 12px',
+                                                borderRadius: '20px',
+                                                border: '1px solid',
+                                                borderColor: isSelected ? 'var(--brand-primary)' : 'var(--border-primary)',
+                                                background: isSelected ? 'var(--brand-primary)' : 'transparent',
+                                                color: isSelected ? '#fff' : 'var(--text-primary)',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            {s.nickname}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* Sub-tasks Section */}
