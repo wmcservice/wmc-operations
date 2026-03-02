@@ -796,14 +796,13 @@ function JobModal({ job, staff, onSave, onClose }) {
     );
 }
 
-function JobDetailModal({ job, staff, onClose, onEdit, onDelete, onUpdate, onStatusChange }) {
+function JobDetailModal({ job, staff, user, onClose, onEdit, onDelete, onUpdate, onStatusChange }) {
     const statusClass = statusToKey(job.status);
     const [isAdding, setIsAdding] = useState(false);
     const [newLog, setNewLog] = useState('');
     const [logAttachments, setLogAttachments] = useState([]);
     const [logStaffIds, setLogStaffIds] = useState(job.assignedStaffIds || []);
     const [localIssues, setLocalIssues] = useState(job.currentIssues || '');
-    const [logAuthorId, setLogAuthorId] = useState(''); // New: State for the person recording the log
 
     useEffect(() => {
         setLocalIssues(job.currentIssues || '');
@@ -825,13 +824,9 @@ function JobDetailModal({ job, staff, onClose, onEdit, onDelete, onUpdate, onSta
 
     const handleAddLog = async () => {
         if (!newLog.trim()) return;
-        if (!logAuthorId) {
-            alert('กรุณาเลือกผู้บันทึก');
-            return;
-        }
-
-        const authorStaff = staff.find(s => s.id === logAuthorId);
-        const authorName = authorStaff ? authorStaff.nickname : (job.createdBy || 'Admin');
+        
+        // Auto-identify author from session metadata or email
+        const authorName = user?.user_metadata?.nickname || user?.email?.split('@')[0] || 'Admin';
 
         try {
             const { data, error } = await supabase.from('progress_logs').insert([{
@@ -854,7 +849,6 @@ function JobDetailModal({ job, staff, onClose, onEdit, onDelete, onUpdate, onSta
 
             setNewLog('');
             setLogAttachments([]);
-            // Keep the author selected for convenience if adding multiple logs
             if (onUpdate) onUpdate();
         } catch (error) {
             console.error('Error adding log:', error);
@@ -1124,22 +1118,6 @@ function JobDetailModal({ job, staff, onClose, onEdit, onDelete, onUpdate, onSta
                         </h4>
                         
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
-                            {/* Author Selection - New */}
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', minWidth: '70px' }}>ผู้บันทึก:</span>
-                                <select 
-                                    className="select" 
-                                    style={{ flex: 1, height: '32px', fontSize: '12px', padding: '0 8px' }}
-                                    value={logAuthorId}
-                                    onChange={e => setLogAuthorId(e.target.value)}
-                                >
-                                    <option value="">-- เลือกผู้บันทึก --</option>
-                                    {staff.filter(s => s.isActive).sort((a,b) => a.nickname.localeCompare(b.nickname)).map(s => (
-                                        <option key={s.id} value={s.id}>{s.nickname}</option>
-                                    ))}
-                                </select>
-                            </div>
-
                             {/* Worker Selection for this log */}
                             <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                 <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-tertiary)', marginBottom: '8px', textTransform: 'uppercase' }}>คนทำงานวันนี้:</div>

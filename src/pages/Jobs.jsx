@@ -10,7 +10,7 @@ import { formatDate, getStatusColor, getPriorityColor, statusToKey, jobTypeToKey
 import { read, utils, writeFile } from 'xlsx';
 import './Jobs.css';
 
-export default function Jobs() {
+export default function Jobs({ user }) {
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -692,6 +692,7 @@ export default function Jobs() {
                 <JobDetailModal
                     job={detailJob}
                     staff={staff}
+                    user={user}
                     onClose={() => setShowDetailModal(false)}
                     onStatusChange={handleStatusChange}
                     onUpdate={() => {
@@ -1004,14 +1005,13 @@ function JobModal({ job, staff, onSave, onClose }) {
     );
 }
 
-function JobDetailModal({ job, staff, onClose, onUpdate, onStatusChange }) {
+function JobDetailModal({ job, staff, user, onClose, onUpdate, onStatusChange }) {
     const statusClass = statusToKey(job.status);
     const [isAdding, setIsAdding] = useState(false);
     const [newLog, setNewLog] = useState('');
     const [logAttachments, setLogAttachments] = useState([]);
     const [logStaffIds, setLogStaffIds] = useState(job.assignedStaffIds || []); // New: Track staff for this specific log
     const [localIssues, setLocalIssues] = useState(job.currentIssues || '');
-    const [logAuthorId, setLogAuthorId] = useState(''); // New: State for the person recording the log
 
     // Sync local state when job prop changes
     useEffect(() => {
@@ -1031,13 +1031,9 @@ function JobDetailModal({ job, staff, onClose, onUpdate, onStatusChange }) {
 
     const handleAddLog = async () => {
         if (!newLog.trim()) return;
-        if (!logAuthorId) {
-            alert('กรุณาเลือกผู้บันทึก');
-            return;
-        }
-
-        const authorStaff = staff.find(s => s.id === logAuthorId);
-        const authorName = authorStaff ? authorStaff.nickname : (job.createdBy || 'Admin');
+        
+        // Auto-identify author from session metadata or email
+        const authorName = user?.user_metadata?.nickname || user?.email?.split('@')[0] || 'Admin';
 
         try {
             const { data, error } = await supabase.from('progress_logs').insert([{
