@@ -1011,6 +1011,7 @@ function JobDetailModal({ job, staff, onClose, onUpdate, onStatusChange }) {
     const [logAttachments, setLogAttachments] = useState([]);
     const [logStaffIds, setLogStaffIds] = useState(job.assignedStaffIds || []); // New: Track staff for this specific log
     const [localIssues, setLocalIssues] = useState(job.currentIssues || '');
+    const [logAuthorId, setLogAuthorId] = useState(''); // New: State for the person recording the log
 
     // Sync local state when job prop changes
     useEffect(() => {
@@ -1030,12 +1031,20 @@ function JobDetailModal({ job, staff, onClose, onUpdate, onStatusChange }) {
 
     const handleAddLog = async () => {
         if (!newLog.trim()) return;
+        if (!logAuthorId) {
+            alert('กรุณาเลือกผู้บันทึก');
+            return;
+        }
+
+        const authorStaff = staff.find(s => s.id === logAuthorId);
+        const authorName = authorStaff ? authorStaff.nickname : (job.createdBy || 'Admin');
+
         try {
             const { data, error } = await supabase.from('progress_logs').insert([{
                 job_id: job.id,
                 log_date: new Date().toISOString().split('T')[0],
                 text: newLog,
-                author: job.createdBy || 'Admin'
+                author: authorName
             }]).select();
 
             if (error) throw error;
